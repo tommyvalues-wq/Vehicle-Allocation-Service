@@ -48,7 +48,14 @@
       </section>
 
       <section class="card messages-card">
-        <h2>Crew Messages</h2>
+        <div class="messages-head">
+          <h2>Crew Messages</h2>
+          <div class="msg-tabs">
+            <button type="button" id="chatTab" class="tab active">Chat</button>
+            <button type="button" id="inboxTab" class="tab">Messages <span id="unreadBadge">0</span></button>
+          </div>
+        </div>
+        <div id="inboxPanel" class="inbox-panel hidden"></div>
         <div id="messages" class="messages">Messages will appear here once a crew is selected.</div>
         <form id="messageForm" class="message-form">
           <input id="messageInput" placeholder="Message selected crew..." autocomplete="off" />

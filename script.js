@@ -73,6 +73,7 @@ function playSound(kind){
 }
 
 let map, fleet = [], selected = null, town = towns.find(t => t[0] === 'London');
+let currentMessageTab = 'chat';
 let incidents = [], landmarkLayer, routeLayer, unitLayer, lastTownToken = 0;
 
 function $(id){ return document.getElementById(id); }
@@ -99,6 +100,8 @@ function init(){
   $('townSearch').addEventListener('keydown',e=>{ if(e.key === 'Enter') selectTown(); });
   $('messageForm').addEventListener('submit',sendMessage);
   $('closeCode0').onclick = () => $('code0Modal').classList.add('hidden');
+  $('chatTab').onclick = () => setMessageTab('chat');
+  $('inboxTab').onclick = () => setMessageTab('inbox');
   setInterval(tick, 700);
   setInterval(updateClock, 1000);
   setInterval(randomDispatcherActivity, 8500);
@@ -153,11 +156,14 @@ async function regenerateFleet(){
   fleet = []; incidents = []; selected = null;
   $('messages').textContent = 'Messages will appear here once a crew is selected.';
   $('selectedVehicle').textContent = 'No vehicle selected';
+  if($('inboxPanel')) $('inboxPanel').innerHTML = '<p>No previous messages yet.</p>';
+  updateUnreadBadge();
   const count = Math.floor(rand(28,45));
   $('statusStrip').textContent = `Building road-following routes for ${count} units in ${town[0]}...`;
   const token = lastTownToken;
   for(let i=0; i<count; i++) await addVehicle(token);
   renderIncidents();
+  renderInbox(); updateUnreadBadge();
   setTimeout(()=>$('statusStrip').textContent = `${fleet.length} units active • routes locked to roads where OSRM is available`, 1000);
 }
 
@@ -170,7 +176,7 @@ async function addVehicle(token){
   const v = {
     id:safeId(), name:pick(firstNames), call:callsign(), lat, lng, status,
     job:null, speed:rand(.00022,.00065), route, routeIndex:0, stop:Math.random()<.2?Math.floor(rand(6,22)):0,
-    messages:[], personality:pick(personalities), shiftJobs:Math.floor(rand(1,10)), lastUserTexts:[], lastReplyAt:0,
+    messages:[], unread:0, personality:pick(personalities), shiftJobs:Math.floor(rand(1,10)), lastUserTexts:[], lastReplyAt:0,
     routeLine:null, currentLandmark:null
   };
   if(status !== 'available' && Math.random()<.65) assignIncident(v, false);
@@ -271,13 +277,62 @@ function renderIncidents(){
   const live = incidents.slice(0,12);
   $('incidentList').innerHTML = live.length ? live.map(i=>`<div class="incident ${i.resourceRequest && !i.resourceSent ? 'needs-resource' : ''}"><strong>${i.priority} • ${i.type}</strong><span>${i.addr}, ${town[0]}</span><br><small>Assigned: ${i.unit} • ${i.hospital}</small>${i.resourceRequest ? `<br><em>Resource: ${i.resourceSent ? i.resourceSent + ' sent' : i.resourceRequest + ' requested'}</em>` : ''}</div>`).join('') : '<p>No live incidents assigned.</p>';
 }
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function setMessageTab(tab){
+  currentMessageTab = tab;
+  $('chatTab').classList.toggle('active', tab === 'chat');
+  $('inboxTab').classList.toggle('active', tab === 'inbox');
+  $('messages').classList.toggle('hidden', tab !== 'chat');
+  $('messageForm').classList.toggle('hidden', tab !== 'chat');
+  $('inboxPanel').classList.toggle('hidden', tab !== 'inbox');
+  if(tab === 'chat' && selected){ selected.unread = 0; updateUnreadBadge(); }
+  renderMessages();
+  renderInbox();
+}
+function addCrewMessage(unit, text, sound='message'){
+  unit.messages.push({who:'crew', text});
+  if(selected !== unit || currentMessageTab !== 'chat') unit.unread = (unit.unread || 0) + 1;
+  playSound(sound);
+  updateUnreadBadge();
+  if(selected === unit){ renderMessages(); renderSelected(); }
+  renderInbox();
+}
+function updateUnreadBadge(){
+  const total = fleet.reduce((sum,u)=>sum+(u.unread||0),0);
+  $('unreadBadge').textContent = total;
+  $('unreadBadge').style.display = total ? 'inline-block' : 'none';
+}
+function lastMessage(unit){
+  const m = [...unit.messages].reverse().find(x => x.who === 'crew' || x.who === 'me');
+  return m ? m.text : 'No previous messages';
+}
+function renderInbox(){
+  const panel = $('inboxPanel');
+  if(!panel) return;
+  const withMessages = fleet.filter(u => u.messages.length || u.unread).sort((a,b)=>(b.unread||0)-(a.unread||0) || b.messages.length-a.messages.length);
+  panel.innerHTML = withMessages.length ? withMessages.map(u=>`<div class="inbox-item ${(u.unread||0)?'unread':''}" onclick="openThread('${u.id}')"><div><strong>${escapeHtml(u.call)}</strong> <small>${escapeHtml(u.name)} • ${statusText(u.status)}</small><br><small>${escapeHtml(lastMessage(u)).slice(0,120)}</small></div>${(u.unread||0)?`<span class="inbox-count">${u.unread}</span>`:''}</div>`).join('') : '<p>No previous messages yet.</p>';
+}
+function openThread(id){
+  const unit = fleet.find(u=>u.id === id);
+  if(!unit) return;
+  selected = unit;
+  unit.unread = 0;
+  renderSelected();
+  setMessageTab('chat');
+}
 function renderMessages(){
   const box = $('messages');
-  if(!selected) return;
+  if(!selected){ box.textContent = 'Messages will appear here once a crew is selected.'; return; }
+  if(currentMessageTab === 'chat') selected.unread = 0;
+  updateUnreadBadge();
   box.innerHTML = selected.messages.length
-    ? selected.messages.map(m=>`<div class="msg ${m.who}">${m.text}</div>`).join('')
-    : `<div class="msg crew">${selected.name}: Hey control, ${selected.call} here. What do you need?</div>`;
+    ? selected.messages.map(m=>`<div class="msg ${m.who}">${escapeHtml(m.text)}</div>`).join('')
+    : `<div class="msg crew">${escapeHtml(selected.name)}: Hey control, ${escapeHtml(selected.call)} here. What do you need?</div>`;
   box.scrollTop = box.scrollHeight;
+  renderInbox();
 }
 
 function sendMessage(e){
@@ -304,8 +359,7 @@ function sendMessage(e){
     if(selected === responder) renderMessages();
     setTimeout(()=>{
       responder.messages = responder.messages.filter(m => m.who !== 'typing');
-      responder.messages.push({who:'crew', text:crewReply(text, responder)});
-      playSound('message');
+      addCrewMessage(responder, crewReply(text, responder), 'message');
       responder.lastReplyAt = Date.now();
       if(selected === responder) renderMessages();
     }, rand(1800,7600));
@@ -373,9 +427,7 @@ function crewReply(text, unit){
 
 
 function addCrewSystemMessage(unit, text, sound='message'){
-  unit.messages.push({who:'crew', text:`${unit.name}: ${text}`});
-  playSound(sound);
-  if(selected === unit){ renderMessages(); renderSelected(); }
+  addCrewMessage(unit, `${unit.name}: ${text}`, sound);
 }
 
 function putSelectedOnMealBreak(){
@@ -508,16 +560,48 @@ function fallbackLandmarks(){
   });
 }
 
-function scheduleCode0(){ setTimeout(()=>{ triggerCode0(); scheduleCode0(); }, rand(10,20)*60*1000); }
+const code0Reasons = [
+  'crew reports aggressive patient and panic button was pressed during assessment',
+  'bystanders becoming hostile at scene and crew requested immediate assistance',
+  'patient family member threatening crew while they are on scene',
+  'crew unable to safely leave location due to public disorder nearby',
+  'crew activated panic button after a sudden safety concern inside the address',
+  'crew reports unknown male attempting to enter the ambulance',
+  'scene has become unsafe and crew need urgent support before moving patient'
+];
+const code0Responders = [
+  ['Police immediate response unit','Duty Operations Manager','Nearest available ambulance'],
+  ['Police','Ambulance officer','Second crew for support'],
+  ['Police firearms/local response check','Clinical team leader','Nearest double crewed ambulance'],
+  ['Police','Fire service standby','Ambulance incident officer'],
+  ['Police grade 1 response','HEMS desk informed','Nearest available resource']
+];
+
+function scheduleCode0(){
+  // Rare event: roughly one Code 0 every 45-90 minutes while the simulator is open.
+  setTimeout(()=>{ triggerCode0(); scheduleCode0(); }, rand(45,90)*60*1000);
+}
 function triggerCode0(){
-  const candidates = fleet.filter(x=>x.status !== 'code0');
+  const candidates = fleet.filter(x=>x.status !== 'code0' && x.status !== 'meal');
   const v = pick(candidates.length ? candidates : fleet); if(!v) return;
-  v.status = 'code0'; v.marker.setIcon(unitIcon(v.status));
+  const reason = pick(code0Reasons);
+  const responders = pick(code0Responders);
+  v.status = 'code0';
+  v.code0 = { reason, responders, time: new Date() };
+  v.marker.setIcon(unitIcon(v.status));
   playSound('code0');
-  $('code0Text').textContent = `${v.call} (${v.name}) has declared CODE 0 in ${town[0]}. Immediate dispatcher review required.`;
+  const location = v.job ? `${v.job.address}, ${town[0]}` : `near ${town[0]} town centre`;
+  $('code0Text').innerHTML = `
+    <strong>${v.call}</strong> — ${v.name}<br>
+    <span class="code0-line"><b>Location:</b> ${location}</span>
+    <span class="code0-line"><b>Reason:</b> ${reason}.</span>
+    <span class="code0-line"><b>Other services responding:</b> ${responders.join(', ')}.</span>
+    <span class="code0-line"><b>Action:</b> keep channel open, monitor crew safety, and dispatch nearest support.</span>
+  `;
   $('code0Modal').classList.remove('hidden');
+  addCrewMessage(v, `CODE 0 activated. ${reason}. Need urgent assistance to our location now.`, true);
   if(selected === v) renderSelected();
-  setTimeout(()=>{ if(v.status === 'code0'){ v.status = 'available'; v.job = null; if(selected === v) renderSelected(); } }, 120000);
+  setTimeout(()=>{ if(v.status === 'code0'){ v.status = 'available'; v.job = null; v.code0 = null; v.marker.setIcon(unitIcon(v.status)); if(selected === v) renderSelected(); } }, 180000);
 }
 function updateClock(){ $('clock').textContent = new Date().toLocaleTimeString('en-GB',{hour12:false}); }
 window.addEventListener('load', init);
