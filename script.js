@@ -245,8 +245,7 @@ function make999Transcript(unit, job){
     `Operator: ${unit.call} has been attached. If anything changes, tell me immediately.`
   ];
   if(job.priority === 'CAT 1') lines.splice(5,0,`Operator: If they stop breathing normally, I will talk you through CPR.`);
-  return lines.join('
-');
+  return lines.join('\n');
 }
 
 function nearestHospitalName(){
