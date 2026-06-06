@@ -3,11 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vehicle Allocation</title>
+  <title>999 Vehicle Allocation</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar"><div><h1>Vehicle Allocation</h1></div></header>
+  <header class="topbar">
+    <div>
+      <h1>999 Dispatcher Map</h1>
+      <p>Live vehicle allocation, town view, crew messaging and incident status</p>
+    </div>
+    <div class="status-strip"><span class="live-dot"></span> LIVE CONTROL</div>
+  </header>
 
   <main class="layout">
     <section class="map-panel">
@@ -16,9 +22,12 @@
           <select id="townSelect"></select>
         </label>
         <button id="regenBtn">Regenerate fleet</button>
+        <span id="fleetCount" class="pill"></span>
       </div>
       <div id="map" class="map">
-        <div class="grid"></div>
+        <iframe id="googleMap" class="google-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <div class="dispatch-overlay"></div>
+        <div class="vehicle-layer" aria-label="Ambulance layer"></div>
       </div>
     </section>
 
@@ -45,7 +54,7 @@
   <div id="codePopup" class="code-popup hidden">
     <strong>CODE-0 ALERT</strong>
     <span id="codeText"></span>
-    <button id="closeCode">Close</button>
+    <button id="closeCode">Acknowledge</button>
   </div>
 
   <script src="script.js"></script>
