@@ -53,3 +53,46 @@ body{min-width:0}.topbar{height:64px}.topbar h1{font-size:24px}.clock{font-size:
 .transcript{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:#07111f;padding:8px}.transcript summary{cursor:pointer;color:var(--cyan);font-weight:800}.transcript pre{white-space:pre-wrap;font-size:12px;color:#d8e6f7;line-height:1.35;margin:8px 0 0;font-family:Consolas,monospace}
 .unit-blip.status-onscene{background:var(--amber)!important;color:var(--amber)!important}.unit-blip.status-mobile{background:var(--blue)!important;color:var(--blue)!important}.unit-blip.status-hospital{background:#9b5cff!important;color:#9b5cff!important}.unit-blip.status-restock{background:var(--amber)!important;color:var(--amber)!important}.unit-blip.status-code0{background:var(--red)!important;color:var(--red)!important}.small-btn.urgent{background:var(--amber)!important;border-color:var(--amber)!important;color:#06111f}.incident.needs-resource{border-color:var(--amber);box-shadow:0 0 0 1px #f7b73355}
 #mapMode{background:#172c45;border-color:#486d91}
+
+.vehicleBlip{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    border:2px solid white;
+    box-shadow:0 0 8px rgba(255,255,255,.5);
+}
+
+.vehicleBlip.available{
+    background:#18d26e;
+}
+
+.vehicleBlip.mobile{
+    background:#3aa6ff;
+}
+
+.vehicleBlip.onscene{
+    background:#ff9800;
+}
+
+.vehicleBlip.transport{
+    background:#cc66ff;
+}
+
+.vehicleBlip.hospital{
+    background:#666;
+}
+
+.vehicleBlip.meal{
+    background:#8b5a2b;
+}
+
+.vehicleBlip.code0{
+    background:red;
+    animation:flash .6s infinite;
+}
+
+@keyframes flash{
+    50%{
+        opacity:.2;
+    }
+}
