@@ -39,3 +39,5 @@
 .topbar:after{content:'sound enabled after first click';font-size:11px;color:#8fa6c3;border:1px solid #234463;border-radius:999px;padding:5px 9px;margin-left:10px}
 .modal:not(.hidden) .modal-box{animation:code0Shake .38s infinite alternate}
 @keyframes code0Shake{from{transform:translateX(-2px);box-shadow:0 0 30px #ff3b4f66}to{transform:translateX(2px);box-shadow:0 0 70px #ff3b4faa}}
+.topbar p{display:none}
+.unit-actions{margin-top:12px;display:flex;flex-direction:column;gap:8px}.resource-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.small-btn{font-size:12px;padding:7px 9px;border-radius:7px}.small-btn.urgent{background:var(--red);border-color:var(--red);animation:pulseButton 1s infinite}.small-btn.disabled{opacity:.55;cursor:not-allowed}.resource-warn{color:var(--amber)!important}.incident.needs-resource{border-color:var(--red);box-shadow:0 0 0 1px #ff3b4f55}.incident em{color:var(--amber);font-style:normal;font-weight:700}.status-pill.meal{color:#37d7ff;border-color:#37d7ff}.unit-blip.status-meal{background:#37d7ff;color:#37d7ff;animation:pulseBlip 2.4s infinite}@keyframes pulseButton{0%,100%{filter:brightness(1)}50%{filter:brightness(1.35)}}

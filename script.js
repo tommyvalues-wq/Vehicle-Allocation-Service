@@ -24,6 +24,7 @@ const firstNames = ['Alex','Sam','Jamie','Morgan','Taylor','Jordan','Casey','Ril
 const callTypes = ['Chest pain','Breathing difficulties','Fall with injury','RTC reported','Abdominal pain','Stroke symptoms','Seizure','Unconscious person','Mental health crisis','Maternity emergency','Diabetic emergency','Allergic reaction','Overdose concern','Cardiac arrest','Welfare concern','Collapse queried','Paediatric fever'];
 const streets = ['High Street','Station Road','Church Lane','Victoria Road','Queen Street','King Street','London Road','Park Road','Mill Lane','School Road','Bridge Street','Market Place','The Crescent','Manor Road','Albert Road','Hospital Road','North Street','South Street','Green Lane'];
 const statuses = ['available','mobile','onscene','hospital','restock'];
+const resourceTypes = ['Police','Fire','Extra ambulance','HEMS','Mental health team','Specialist paramedic'];
 const personalities = ['chilled','dry','formal','chatty','tired'];
 
 
@@ -81,7 +82,7 @@ function pad(n){ return String(n).padStart(3,'0'); }
 function callsign(){ return Math.random() < 0.5 ? `M1-B${pad(Math.floor(rand(1,999)))}` : `NW-A${pad(Math.floor(rand(1,999)))}`; }
 function address(){ return `${Math.floor(rand(1,240))} ${pick(streets)}`; }
 function safeId(){ return (crypto?.randomUUID?.() || String(Date.now() + Math.random())); }
-function statusText(s){ return ({available:'Available',mobile:'Mobile',onscene:'On scene',hospital:'At hospital',restock:'Restocking',code0:'CODE 0'})[s] || s; }
+function statusText(s){ return ({available:'Available',mobile:'Mobile',onscene:'On scene',hospital:'At hospital',restock:'Restocking',meal:'Meal break',code0:'CODE 0'})[s] || s; }
 
 function init(){
   setupAudioUnlock();
@@ -101,6 +102,7 @@ function init(){
   setInterval(tick, 700);
   setInterval(updateClock, 1000);
   setInterval(randomDispatcherActivity, 8500);
+  setInterval(randomCrewJobMessages, 22000);
   updateClock();
   loadLandmarks();
   regenerateFleet();
@@ -179,7 +181,7 @@ async function addVehicle(token){
 }
 
 function assignIncident(v, push=true){
-  v.job = {type:pick(callTypes), addr:address(), priority:`CAT ${Math.ceil(rand(1,5))}`, hospital:nearestHospitalName(), created:new Date()};
+  v.job = {type:pick(callTypes), addr:address(), priority:`CAT ${Math.ceil(rand(1,5))}`, hospital:nearestHospitalName(), created:new Date(), resourceRequest:null, resourceSent:null};
   if(push){
     playSound('job');
     incidents.unshift({unit:v.call, crew:v.name, ...v.job});
@@ -218,7 +220,7 @@ function moveAlongRoute(v){
 
 function tick(){
   fleet.forEach(v=>{
-    if(v.status === 'code0') return;
+    if(v.status === 'code0' || v.status === 'meal') return;
     if(v.stop > 0){ v.stop--; return; }
     if(['onscene','hospital','restock'].includes(v.status) && Math.random()<.18){ v.stop = Math.floor(rand(5,20)); return; }
     if(Math.random()<.035){ v.stop = Math.floor(rand(3,17)); return; }
@@ -232,7 +234,7 @@ function tick(){
 function randomDispatcherActivity(){
   if(!fleet.length) return;
   const v = pick(fleet);
-  if(v.status === 'code0') return;
+  if(v.status === 'code0' || v.status === 'meal') return;
   if(Math.random() < .28){
     const next = pick(statuses);
     v.status = next;
@@ -257,13 +259,17 @@ function selectVehicle(v){
 function renderSelected(){
   if(!selected) return;
   const job = selected.job
-    ? `<b>Current job:</b> ${selected.job.priority} - ${selected.job.type}<br><b>Address:</b> ${selected.job.addr}, ${town[0]}<br><b>Destination:</b> ${selected.job.hospital}`
+    ? `<b>Current job:</b> ${selected.job.priority} - ${selected.job.type}<br><b>Address:</b> ${selected.job.addr}, ${town[0]}<br><b>Destination:</b> ${selected.job.hospital}${selected.job.resourceRequest ? `<br><b class="resource-warn">Resource request:</b> ${selected.job.resourceRequest}${selected.job.resourceSent ? ` — ${selected.job.resourceSent} sent` : ''}` : ''}`
     : '<b>Status:</b> No job';
-  $('selectedVehicle').innerHTML = `<b>${selected.call}</b><br>Crew: ${selected.name}<br>Status: <span class="status-pill ${selected.status}">${statusText(selected.status)}</span><br>Personality: ${selected.personality}<br>${job}`;
+  const mealBtn = selected.status === 'meal' ? `<button class="small-btn disabled" disabled>Meal break active</button>` : `<button class="small-btn" onclick="putSelectedOnMealBreak()">Put on meal break</button>`;
+  const resourceBtns = selected.job && selected.job.resourceRequest && !selected.job.resourceSent
+    ? `<div class="resource-actions"><button class="small-btn urgent" onclick="sendRequestedResource()">Send requested resource</button><button class="small-btn" onclick="sendResource('Extra ambulance')">Send extra ambulance</button><button class="small-btn" onclick="sendResource('Police')">Send police</button><button class="small-btn" onclick="sendResource('Fire')">Send fire</button></div>`
+    : selected.job ? `<div class="resource-actions"><button class="small-btn" onclick="sendResource('Extra ambulance')">Send extra ambulance</button><button class="small-btn" onclick="sendResource('Police')">Send police</button><button class="small-btn" onclick="sendResource('Fire')">Send fire</button></div>` : '';
+  $('selectedVehicle').innerHTML = `<b>${selected.call}</b><br>Crew: ${selected.name}<br>Status: <span class="status-pill ${selected.status}">${statusText(selected.status)}</span><br>Personality: ${selected.personality}<br>${job}<div class="unit-actions">${mealBtn}${resourceBtns}</div>`;
 }
 function renderIncidents(){
   const live = incidents.slice(0,12);
-  $('incidentList').innerHTML = live.length ? live.map(i=>`<div class="incident"><strong>${i.priority} • ${i.type}</strong><span>${i.addr}, ${town[0]}</span><br><small>Assigned: ${i.unit} • ${i.hospital}</small></div>`).join('') : '<p>No live incidents assigned.</p>';
+  $('incidentList').innerHTML = live.length ? live.map(i=>`<div class="incident ${i.resourceRequest && !i.resourceSent ? 'needs-resource' : ''}"><strong>${i.priority} • ${i.type}</strong><span>${i.addr}, ${town[0]}</span><br><small>Assigned: ${i.unit} • ${i.hospital}</small>${i.resourceRequest ? `<br><em>Resource: ${i.resourceSent ? i.resourceSent + ' sent' : i.resourceRequest + ' requested'}</em>` : ''}</div>`).join('') : '<p>No live incidents assigned.</p>';
 }
 function renderMessages(){
   const box = $('messages');
@@ -363,6 +369,97 @@ function crewReply(text, unit){
     `Sound. If anything changes our end I’ll message straight away.`,
     `Got it. Bit tied up, but we’ve seen it.`
   ]);
+}
+
+
+function addCrewSystemMessage(unit, text, sound='message'){
+  unit.messages.push({who:'crew', text:`${unit.name}: ${text}`});
+  playSound(sound);
+  if(selected === unit){ renderMessages(); renderSelected(); }
+}
+
+function putSelectedOnMealBreak(){
+  if(!selected || selected.status === 'code0') return;
+  const unit = selected;
+  unit.prevStatusBeforeMeal = unit.status;
+  unit.status = 'meal';
+  unit.stop = 260; // approximately 3 minutes at the current tick speed
+  unit.marker?.setIcon(unitIcon(unit.status));
+  addCrewSystemMessage(unit, pick([
+    'Cheers, we’ll grab food quickly and keep the radio on.',
+    'Nice one. Three mins to inhale something that counts as lunch 😂',
+    'Meal break received, thank you. We’ll be back available shortly.',
+    'Absolute legend. We’ll be back in three.'
+  ]));
+  renderSelected();
+  setTimeout(()=>{
+    if(!fleet.includes(unit) || unit.status !== 'meal') return;
+    unit.status = 'available';
+    unit.job = null;
+    unit.stop = 0;
+    unit.marker?.setIcon(unitIcon(unit.status));
+    addCrewSystemMessage(unit, pick([
+      'Back from meal, booked clear and available.',
+      'That was the fastest food break known to humanity. We’re clear now 😂',
+      'Meal break complete, available when needed.',
+      'We’re back mobile and clear.'
+    ]));
+    if(selected === unit) renderSelected();
+  }, 180000);
+}
+
+function sendResource(type){
+  if(!selected || !selected.job) return;
+  selected.job.resourceSent = type;
+  const cad = incidents.find(i => i.unit === selected.call && i.addr === selected.job.addr);
+  if(cad){ cad.resourceRequest = selected.job.resourceRequest; cad.resourceSent = type; }
+  playSound('job');
+  addCrewSystemMessage(selected, pick([
+    `${type} received, thanks control. That’ll help.`,
+    `Perfect, thanks. We’ll keep an eye out for ${type.toLowerCase()}.`,
+    `Cheers, ${type.toLowerCase()} is exactly what we needed.`,
+    `Thanks mate, we’ll update once they arrive.`
+  ]));
+  renderSelected();
+  renderIncidents();
+}
+
+function sendRequestedResource(){
+  if(selected?.job?.resourceRequest) sendResource(selected.job.resourceRequest);
+}
+
+function randomCrewJobMessages(){
+  if(!fleet.length) return;
+  const working = fleet.filter(v => v.job && v.status !== 'meal' && v.status !== 'code0');
+  if(!working.length) return;
+  const unit = pick(working);
+  const job = unit.job;
+  if(Math.random() < .42 && !job.resourceRequest && !job.resourceSent){
+    job.resourceRequest = pick(resourceTypes);
+    const cad = incidents.find(i => i.unit === unit.call && i.addr === job.addr);
+    if(cad) cad.resourceRequest = job.resourceRequest;
+    addCrewSystemMessage(unit, pick([
+      `Control, can we get ${job.resourceRequest.toLowerCase()} started to ${job.addr} please?`,
+      `Any chance of ${job.resourceRequest.toLowerCase()} for this one? Scene is getting a bit more involved.`,
+      `Can you attach ${job.resourceRequest.toLowerCase()} when you get a sec please?`,
+      `We’re going to need ${job.resourceRequest.toLowerCase()} here please. Not urgent urgent, but sooner rather than later.`
+    ]), 'job');
+    renderIncidents();
+    return;
+  }
+  const questions = [
+    `Do we have any extra notes for ${job.addr}?`,
+    `Can you confirm the caller is still on scene?`,
+    `Any hazards flagged for this address?`,
+    `Do we know if police have been informed for this?`,
+    `Can you check if there’s a key safe code on the log?`,
+    `Have we got an age for the patient?`,
+    `Can you update us if the caller rings back?`,
+    `Is ${job.hospital} still accepting, or are they diverting?`,
+    `Do you want us to convey if suitable or wait for clinical advice?`,
+    `Can you see if there’s any previous history at this address?`
+  ];
+  addCrewSystemMessage(unit, pick(questions));
 }
 
 function landmarkIcon(kind){ return L.divIcon({className:'',html:`<div class="landmark ${kind}"></div>`,iconSize:[20,20],iconAnchor:[10,10]}); }
