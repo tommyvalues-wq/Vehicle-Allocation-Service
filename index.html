@@ -1,62 +1,72 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>999 Vehicle Allocation</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vehicle Allocation</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>999 Dispatcher Map</h1>
-      <p>Live vehicle allocation, town view, crew messaging and incident status</p>
+      <h1>Vehicle Allocation</h1>
+      <p>999 dispatcher map • OpenStreetMap • simulated CAD</p>
     </div>
-    <div class="status-strip"><span class="live-dot"></span> LIVE CONTROL</div>
+    <div class="clock" id="clock">--:--:--</div>
   </header>
 
-  <main class="layout">
+  <main class="app">
     <section class="map-panel">
       <div class="toolbar">
         <label>Viewing town
-          <select id="townSelect"></select>
+          <input id="townSearch" list="townList" placeholder="Search UK town..." />
+          <datalist id="townList"></datalist>
         </label>
-        <button id="regenBtn">Regenerate fleet</button>
-        <span id="fleetCount" class="pill"></span>
+        <button id="goTown">Go</button>
+        <button id="regenFleet">Regenerate fleet</button>
+        <span id="statusStrip">System ready</span>
       </div>
-      <div id="map" class="map">
-        <iframe id="googleMap" class="google-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-        <div class="dispatch-overlay"></div>
-        <div class="vehicle-layer" aria-label="Ambulance layer"></div>
+      <div id="map"></div>
+      <div class="legend">
+        <span><b class="dot green"></b>Available</span>
+        <span><b class="dot amber"></b>On job</span>
+        <span><b class="dot red"></b>Code 0</span>
       </div>
     </section>
 
     <aside class="side-panel">
-      <div class="vehicle-card">
-        <h2 id="selectedTitle">Select an ambulance</h2>
-        <p id="selectedMeta">Click a vehicle to see job details and message the crew.</p>
-        <div id="jobBox" class="job-box">No vehicle selected</div>
-      </div>
+      <section class="card selected-card">
+        <h2>Select an ambulance</h2>
+        <p>Click a unit marker to view job details and message the crew.</p>
+        <div id="selectedVehicle" class="vehicle-detail">No vehicle selected</div>
+      </section>
 
-      <div class="message-card">
+      <section class="card incidents-card">
+        <h2>Live CAD</h2>
+        <div id="incidentList" class="incident-list"></div>
+      </section>
+
+      <section class="card messages-card">
         <h2>Crew Messages</h2>
-        <div id="chatLog" class="chat-log">
-          <div class="system-msg">Messages will appear here once a crew is selected.</div>
-        </div>
-        <div class="chat-input-row">
-          <input id="messageInput" type="text" placeholder="Message selected crew..." />
-          <button id="sendBtn">Send</button>
-        </div>
-      </div>
+        <div id="messages" class="messages">Messages will appear here once a crew is selected.</div>
+        <form id="messageForm" class="message-form">
+          <input id="messageInput" placeholder="Message selected crew..." autocomplete="off" />
+          <button>Send</button>
+        </form>
+      </section>
     </aside>
   </main>
 
-  <div id="codePopup" class="code-popup hidden">
-    <strong>CODE-0 ALERT</strong>
-    <span id="codeText"></span>
-    <button id="closeCode">Acknowledge</button>
+  <div id="code0Modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🚨 CODE 0 ALERT</h2>
+      <p id="code0Text"></p>
+      <button id="closeCode0">Acknowledge</button>
+    </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="script.js"></script>
 </body>
 </html>
