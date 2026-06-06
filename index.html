@@ -24,6 +24,7 @@
         </label>
         <button id="goTown">Go</button>
         <button id="regenFleet">Regenerate fleet</button>
+        <button id="mapMode">Satellite map</button>
         <span id="statusStrip">System ready</span>
       </div>
       <div id="map"></div>
@@ -60,6 +61,10 @@
         <form id="messageForm" class="message-form">
           <input id="messageInput" placeholder="Message selected crew..." autocomplete="off" />
           <button>Send</button>
+        </form>
+        <form id="broadcastForm" class="message-form broadcast-form">
+          <input id="broadcastInput" placeholder="Message ALL crews... e.g. Anyone fancy a meal break?" autocomplete="off" />
+          <button>Send all</button>
         </form>
       </section>
     </aside>
