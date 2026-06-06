@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vehicle Allocation</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar"><div><h1>Vehicle Allocation</h1></div></header>
+
+  <main class="layout">
+    <section class="map-panel">
+      <div class="toolbar">
+        <label>Viewing town
+          <select id="townSelect"></select>
+        </label>
+        <button id="regenBtn">Regenerate fleet</button>
+      </div>
+      <div id="map" class="map">
+        <div class="grid"></div>
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <div class="vehicle-card">
+        <h2 id="selectedTitle">Select an ambulance</h2>
+        <p id="selectedMeta">Click a vehicle to see job details and message the crew.</p>
+        <div id="jobBox" class="job-box">No vehicle selected</div>
+      </div>
+
+      <div class="message-card">
+        <h2>Crew Messages</h2>
+        <div id="chatLog" class="chat-log">
+          <div class="system-msg">Messages will appear here once a crew is selected.</div>
+        </div>
+        <div class="chat-input-row">
+          <input id="messageInput" type="text" placeholder="Message selected crew..." />
+          <button id="sendBtn">Send</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="codePopup" class="code-popup hidden">
+    <strong>CODE-0 ALERT</strong>
+    <span id="codeText"></span>
+    <button id="closeCode">Close</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
