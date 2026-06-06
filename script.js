@@ -177,6 +177,7 @@ async function addVehicle(token){
     id:safeId(), name:pick(firstNames), call:callsign(), lat, lng, status,
     job:null, speed:rand(.00022,.00065), route, routeIndex:0, stop:Math.random()<.2?Math.floor(rand(6,22)):0,
     messages:[], unread:0, personality:pick(personalities), shiftJobs:Math.floor(rand(1,10)), lastUserTexts:[], lastReplyAt:0,
+    chatMemory:{mood:pick(['good','knackered','busy','calm','hungry']), lastTopic:null, pendingQuestion:null, lastAsked:null, rapport:0, lastUserIntent:null},
     routeLine:null, currentLandmark:null
   };
   if(status !== 'available' && Math.random()<.65) assignIncident(v, false);
@@ -344,87 +345,178 @@ function sendMessage(e){
   input.value = '';
   const responder = selected;
   responder.lastUserTexts.push(text);
-  responder.lastUserTexts = responder.lastUserTexts.slice(-5);
+  responder.lastUserTexts = responder.lastUserTexts.slice(-8);
   responder.messages.push({who:'me', text});
+  rememberUserMessage(responder, text);
   renderMessages();
-  if(Math.random() < .08){
-    setTimeout(()=>{
-      if(!responder.messages.some(m=>m.text === 'Seen')) responder.messages.push({who:'seen', text:'Seen'});
-      if(selected === responder) renderMessages();
-    }, rand(1200,2800));
+
+  const replyPlan = enhancedCrewReply(text, responder);
+  const seenOnly = replyPlan.seenOnly || Math.random() < 0.04;
+
+  setTimeout(()=>{
+    responder.messages.push({who:'seen', text:'Seen'});
+    if(selected === responder) renderMessages();
+  }, rand(600,1800));
+
+  if(seenOnly){
+    responder.chatMemory.pendingQuestion = responder.chatMemory.pendingQuestion || inferIntent(text);
     return;
   }
+
   setTimeout(()=>{
+    responder.messages = responder.messages.filter(m => !(m.who === 'seen' && m.text === 'Seen'));
     responder.messages.push({who:'typing', text:`${responder.name} is typing…`});
     if(selected === responder) renderMessages();
     setTimeout(()=>{
       responder.messages = responder.messages.filter(m => m.who !== 'typing');
-      addCrewMessage(responder, crewReply(text, responder), 'message');
+      addCrewMessage(responder, replyPlan.main, 'message');
       responder.lastReplyAt = Date.now();
+      if(replyPlan.followUp){
+        setTimeout(()=>{
+          if(!fleet.includes(responder)) return;
+          addCrewMessage(responder, `${responder.name}: ${replyPlan.followUp}`, 'message');
+          if(selected === responder) renderMessages();
+        }, rand(5500,17000));
+      }
       if(selected === responder) renderMessages();
-    }, rand(1800,7600));
-  }, rand(500,1600));
+    }, replyPlan.delay || rand(1800,7600));
+  }, rand(1200,2600));
 }
 
-function crewReply(text, unit){
+function includesAny(text, words){ return words.some(w => text.includes(w)); }
+
+function inferIntent(text){
+  const t = text.toLowerCase();
+  if(includesAny(t,['eta','how long','arrival','mins','minutes'])) return 'eta';
+  if(includesAny(t,['where','location','position'])) return 'location';
+  if(includesAny(t,['free','available','clear','status','update','state'])) return 'status';
+  if(includesAny(t,['hospital','handover','convey','destination'])) return 'hospital';
+  if(includesAny(t,['break','food','coffee','brew','meal'])) return 'break';
+  if(includesAny(t,['shift','busy','day','you ok','alright'])) return 'smalltalk';
+  if(includesAny(t,['police','fire','resource','resources','extra','support','backup'])) return 'resources';
+  if(includesAny(t,['code 0','code-0','urgent','panic'])) return 'urgent';
+  if(includesAny(t,['yes','yeah','yep','send','attach','approved','go ahead'])) return 'confirm';
+  if(includesAny(t,['no','negative','stand down','cancel'])) return 'deny';
+  if(includesAny(t,['thanks','thank','cheers','ta'])) return 'thanks';
+  if(includesAny(t,['hello','hi','morning','evening','yo'])) return 'hello';
+  return 'general';
+}
+
+function rememberUserMessage(unit, text){
+  unit.chatMemory = unit.chatMemory || {};
+  const intent = inferIntent(text);
+  unit.chatMemory.lastUserIntent = intent;
+  unit.chatMemory.lastTopic = intent === 'general' ? unit.chatMemory.lastTopic : intent;
+  if(intent === 'thanks') unit.chatMemory.rapport = (unit.chatMemory.rapport || 0) + 1;
+  if(intent === 'resources' || intent === 'confirm') unit.chatMemory.pendingQuestion = null;
+}
+
+function enhancedCrewReply(text, unit){
   const t = text.toLowerCase();
   const job = unit.job;
   const p = unit.personality;
+  const mem = unit.chatMemory = unit.chatMemory || {mood:'busy'};
   const prefix = `${unit.name}: `;
   const eta = Math.ceil(rand(3,14));
-  const traffic = pick(['traffic is moving alright','traffic is grim through town','roads are weirdly quiet','we are stuck behind every red light going','we are getting through it slowly']);
   const casual = p === 'formal' ? '' : pick([' 👍',' mate',' 😂','']);
-  const tired = p === 'tired' ? ' Honestly, we could do with a brew after this.' : '';
+  const opener = p === 'formal' ? pick(['Received. ','Understood. ','Thanks control. ']) : pick(['Yeah, ','Yep, ','No worries, ','Sound, ','Alright, ']);
+  const traffic = pick(['traffic is moving alright','traffic is horrible through town','roads are weirdly quiet','we are stuck behind every red light going','we are getting through it slowly']);
+  const moodLine = {
+    good: 'crew are alright', knackered: 'we are pretty tired but cracking on', busy: 'it has been back-to-back', calm: 'all calm our end', hungry: 'we are still chasing food, no surprise'
+  }[mem.mood || 'busy'];
 
-  if(t.includes('eta') || t.includes('how long') || t.includes('arrival')){
-    return prefix + (job ? `Sat nav says about ${eta} mins to ${job.addr}. ${traffic}, so I’ll shout if that changes${casual}` : `We’re not committed at the moment, but we’re about ${eta} mins from the centre if you need us${casual}`);
-  }
-  if(t.includes('where') || t.includes('location')){
-    return prefix + pick([
-      `We’re near ${town[0]} centre, mobile at the moment${casual}`,
-      `Just coming past the main road now. Map should have us moving${casual}`,
-      job ? `Heading towards ${job.addr}. We’re not far off now.` : `Sitting clear near the station area, ready for the next one.`
+  let main, followUp = null, delay = rand(1800,7200);
+  const intent = inferIntent(text);
+
+  if(intent === 'confirm' && job?.resourceRequest && !job.resourceSent){
+    main = `${prefix}${opener}please attach ${job.resourceRequest.toLowerCase()} when you can. Scene feels like it might get messy.`;
+    followUp = pick([`Also, can you let them know access is via ${pick(streets)} side if possible?`, `If there is a supervisor nearby, happy for them to tag on as well.`, `Patient is okay-ish at the minute, it is more the scene we are worried about.`]);
+  }else if(intent === 'deny' && job?.resourceRequest && !job.resourceSent){
+    main = `${prefix}Okay, we’ll hold for now, but can you keep it in mind please? We may come back for it if things change.`;
+  }else if(intent === 'eta'){
+    main = prefix + (job ? `${opener}sat nav says about ${eta} mins to ${job.addr}. ${traffic}, so I’ll shout if that changes${casual}` : `${opener}not committed right now. We are roughly ${eta} mins from the centre if you need us${casual}`);
+    followUp = job ? pick([`Caller notes still say ${job.type}, yeah?`, `If the caller rings back, can you send any updates through?`, `We will mark on scene as soon as we pull up.`]) : null;
+  }else if(intent === 'location'){
+    main = prefix + pick([
+      `${opener}we’re near ${town[0]} centre, mobile at the moment${casual}`,
+      `${opener}just passing ${pick(['the station','the retail park','the high street','the hospital side of town'])}. Map should have us moving.`,
+      job ? `${opener}heading towards ${job.addr}. Not far off now.` : `${opener}sitting clear near the station area. Ready if you need us.`
     ]);
+  }else if(intent === 'status'){
+    if(job){
+      main = prefix + pick([
+        `${opener}we’re ${statusText(unit.status).toLowerCase()} on the ${job.priority} ${job.type}. Patient sounds stable from the notes so far.`,
+        `${opener}still dealing with ${job.type}. Nothing dramatic yet, but we’ll update if it changes.`,
+        `${opener}currently ${statusText(unit.status).toLowerCase()}. We’ve got the details and we’re working through it.`
+      ]);
+      followUp = Math.random()<.45 ? pick([`Can you confirm if there are any access notes?`, `Do we have an age for the patient?`, `Can you keep an eye out for a caller update?`]) : null;
+    }else{
+      main = prefix + pick([`${opener}no job on us at the moment. Clear in ${town[0]}.`,`${opener}all quiet for us right now, which is never a bad thing.`,`${opener}available. Van’s good, crew’s good-ish${p==='dry'?'… ish.':''}`]);
+    }
+  }else if(intent === 'hospital'){
+    main = prefix + (job ? `${opener}likely ${job.hospital}. If handover is rough we’ll let you know before we get stuck there${p==='formal'?'.':' 😂'}` : `${opener}no conveyance right now. If we pick one up I’ll update the destination.`);
+    followUp = job ? pick([`Can you check if ${job.hospital} has any diverts showing?`, `If there is a better destination clinically, send it over before we move.`]) : null;
+  }else if(intent === 'break'){
+    main = prefix + pick([`A brew would save lives at this point${p==='formal'?'.':' 😂'}`,`We’ve been trying to get food for about two hours. Standard day really.`,`If you can protect us for ten mins after this, we’d love you forever.`,`Coffee’s gone cold again, obviously.`]);
+    followUp = unit.status === 'meal' ? `We’ll book back on as soon as the three minutes is up.` : null;
+  }else if(intent === 'smalltalk'){
+    main = prefix + pick([`Busy but manageable. Think we’re on job ${unit.shiftJobs} now${casual}`,`It’s been non-stop, but we’re alright. ${moodLine}.`, `One of those shifts where the radio knows when you open your sandwich${p==='formal'?'.':' 😂'}`, `Not too bad. Ask me again after handover though.`]);
+    followUp = pick([`How’s control looking, busy your end?`, `Please tell me there is not a stack of Cat 2s waiting for us.`, `We’ll survive. Probably.`]);
+  }else if(intent === 'resources'){
+    if(job?.resourceRequest && !job.resourceSent){
+      main = `${prefix}${opener}yeah, ${job.resourceRequest.toLowerCase()} is what we need. Can you attach them to ${job.addr} please?`;
+      followUp = pick([`Scene is okay for now, just want them started.`, `We will update if it turns into anything more urgent.`, `Caller sounds a bit anxious so sooner is better.`]);
+    }else if(job){
+      const req = pick(resourceTypes);
+      job.resourceRequest = req;
+      const cad = incidents.find(i => i.unit === unit.call && i.addr === job.addr);
+      if(cad) cad.resourceRequest = req;
+      renderIncidents(); renderSelected();
+      main = `${prefix}${opener}actually yes — can you start ${req.toLowerCase()} to ${job.addr}? It would make this a lot safer/easier.`;
+    }else{
+      main = `${prefix}${opener}no extra resources needed from us. We’re clear at the moment.`;
+    }
+  }else if(intent === 'urgent'){
+    main = prefix + (unit.status === 'code0' ? `Code 0 confirmed. Need urgent assistance to our location now. Keep the line open.` : `${opener}no Code 0 from us. We’re okay, just busy.`);
+  }else if(intent === 'thanks'){
+    main = prefix + pick([`No worries${casual}`,`Cheers control.`, `All good, we’ll keep you posted.`, `Ta, speak in a bit.`, `Appreciate it.`]);
+  }else if(intent === 'hello'){
+    main = prefix + pick([`Hey, go ahead${casual}`,`Hi control, receiving you.`, `Morning. We’re awake… mostly${p==='formal'?'.':' 😂'}`, `Evening, what’s occurring?`]);
+  }else{
+    // Continue the conversation using the last topic instead of ignoring context.
+    if(mem.pendingQuestion === 'eta' || mem.lastTopic === 'eta'){
+      main = `${prefix}${opener}still looking like around ${eta} mins. I’ll give you a shout if that changes.`;
+    }else if(mem.lastTopic === 'resources' && job){
+      main = `${prefix}${opener}on that resource request, ${job.resourceSent ? job.resourceSent + ' has come through, thanks.' : 'we could still do with support when you can.'}`;
+    }else if(mem.lastTopic === 'smalltalk'){
+      main = prefix + pick([`Honestly, we’re just hoping for a quiet half hour${casual}`, `Could be worse. Could be paperwork day.`, `We’re alright. Bit tired, bit hungry, still smiling.`]);
+    }else{
+      main = prefix + pick([
+        `${opener}that’s fine, we’ll keep you updated.`,
+        `${opener}give us a sec and we’ll come back to you.`,
+        `${opener}we’re just working through it now.`,
+        `${opener}message received. If anything changes our end I’ll shout.`,
+        `${opener}bit tied up, but we’ve seen it.`
+      ]);
+    }
   }
-  if(t.includes('free') || t.includes('available') || t.includes('clear')){
-    if(unit.status === 'available') return prefix + pick([`Yep, we’re clear and available${casual}`,`All clear our end. Send it over if you need us.`,`Available now, just finishing a quick tidy in the back.`]);
-    return prefix + pick([`Not quite, still tied up. Shouldn’t be too long${casual}`,`Still on this one. We’ll book clear as soon as we can.`,`Negative at the moment, just waiting on handover.`]);
+
+  mem.lastTopic = intent === 'general' ? mem.lastTopic : intent;
+  if(job && Math.random() < 0.18 && !job.resourceRequest && ['status','eta','general'].includes(intent)){
+    const req = pick(resourceTypes);
+    job.resourceRequest = req;
+    const cad = incidents.find(i => i.unit === unit.call && i.addr === job.addr);
+    if(cad) cad.resourceRequest = req;
+    followUp = followUp || `Actually control, can you also start ${req.toLowerCase()} to us please?`;
+    setTimeout(()=>{ renderIncidents(); renderSelected(); }, 50);
   }
-  if(t.includes('status') || t.includes('update') || t.includes('state')){
-    if(job) return prefix + pick([`Quick update: we’re ${statusText(unit.status).toLowerCase()} on a ${job.priority} ${job.type}. Patient is stable for now.${tired}`,`We’re still dealing with ${job.type}. Nothing dramatic to report, will update if it changes.`,`Currently ${statusText(unit.status).toLowerCase()}. We’ve got the details and we’re working through it.`]);
-    return prefix + pick([`No job on us at the moment. We’re clear in ${town[0]}.`,`All quiet for us right now, which is never a bad thing.`,`We’re available. Van’s good, crew’s good-ish${p==='dry'?'… ish.':''}`]);
-  }
-  if(t.includes('hospital') || t.includes('handover') || t.includes('convey')){
-    return prefix + (job ? `Looks like ${job.hospital}. Handover queue doesn’t look too awful at the moment, famous last words${p==='formal'?'.':' 😂'}` : `No conveyance right now. If we pick one up I’ll update the destination.`);
-  }
-  if(t.includes('break') || t.includes('food') || t.includes('coffee') || t.includes('brew')){
-    return prefix + pick([`A brew would save lives at this point${p==='formal'?'.':' 😂'}`,`We’ve been trying to get food for about two hours. Standard day really.`,`If you can protect us for ten mins after this, we’d love you forever.`,`Coffee’s gone cold again, obviously.`]);
-  }
-  if(t.includes('shift') || t.includes('busy') || t.includes('day')){
-    return prefix + pick([`Busy but manageable. Think we’re on job ${unit.shiftJobs} now${casual}`,`It’s been non-stop, but we’re alright.`, `One of those shifts where the radio knows when you open your sandwich${p==='formal'?'.':' 😂'}`]);
-  }
-  if(t.includes('police') || t.includes('fire')){
-    return prefix + pick([`Yeah, police would be helpful if you can start them.`, `Fire might be needed if that RTC update is right.`, `No other services needed yet, but we’ll shout if the scene changes.`]);
-  }
-  if(t.includes('code 0') || t.includes('code-0') || t.includes('urgent')){
-    return prefix + (unit.status === 'code0' ? `Yeah, Code 0 confirmed. Need urgent assistance to our location now.` : `No Code 0 from us. We’re okay, just busy.`);
-  }
-  if(t.includes('thank') || t.includes('cheers')){
-    return prefix + pick([`No worries${casual}`,`Cheers control.`, `All good, we’ll keep you posted.`, `Ta, speak in a bit.`]);
-  }
-  if(t.includes('hello') || t.includes('hi') || t.includes('morning') || t.includes('evening')){
-    return prefix + pick([`Hey, go ahead${casual}`,`Hi control, receiving you.`, `Morning. We’re awake… mostly${p==='formal'?'.':' 😂'}`, `Evening, what’s occurring?`]);
-  }
-  return prefix + pick([
-    `Yeah no problem, we’ll sort that${casual}`,
-    `Copy that. Give us a sec and we’ll come back to you.`,
-    `Alright, received. We’re just working through it now.`,
-    `Yep, that’s fine. We’ll keep you updated.`,
-    `Sound. If anything changes our end I’ll message straight away.`,
-    `Got it. Bit tied up, but we’ve seen it.`
-  ]);
+
+  return {main, followUp, delay, seenOnly:false};
 }
 
+function crewReply(text, unit){
+  return enhancedCrewReply(text, unit).main;
+}
 
 function addCrewSystemMessage(unit, text, sound='message'){
   addCrewMessage(unit, `${unit.name}: ${text}`, sound);
